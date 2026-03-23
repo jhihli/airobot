@@ -1,0 +1,64 @@
+# Training config for UR5 HDD disassembly dataset with ACT policy
+# Run with:
+#   lerobot-train --config_path configs/train_ur5_hdd_act.yaml
+
+dataset:
+  repo_id: "toyoshima/ur5_hdd_4_pieces"
+  root: "/mnt/data/lerobot_datasets"
+  # Image augmentation — important with only 10 episodes to avoid overfitting
+  image_transforms:
+    enable: true
+
+policy:
+  type: act
+  push_to_hub: false
+
+  # Set to null to auto-infer from dataset features.
+  # Inferred inputs: observation.state (13-dim), observation.images.{top,side_left,side_right}
+  # Inferred output: action (4-dim: delta_x, delta_y, delta_z, gripper)
+  input_features: null
+  output_features: null
+
+  # At 30 fps, chunk_size=60 = 2 seconds of predicted actions.
+  chunk_size: 60
+  n_action_steps: 60
+
+  # Reduced model size for small dataset (10 episodes ~2100 frames)
+  # Default dim_model=512/n_encoder_layers=4 would overfit on this little data
+  dim_model: 256
+  n_heads: 8
+  dim_feedforward: 1024   # scaled down with dim_model
+  n_encoder_layers: 2
+  n_decoder_layers: 1
+  dropout: 0.2             # increased from 0.1 to reduce overfitting
+
+  # Vision backbone
+  vision_backbone: resnet18
+  pretrained_backbone_weights: ResNet18_Weights.IMAGENET1K_V1
+
+  # VAE — reduces compounding error
+  use_vae: true
+  latent_dim: 32
+  kl_weight: 10.0
+
+  # Learning rate — 1e-5 per ACT skill recommendation; stable convergence
+  optimizer_lr: 1.0e-5
+  optimizer_weight_decay: 1.0e-4
+  optimizer_lr_backbone: 1.0e-5
+
+# Training settings
+# Note: there is no "training:" node — these fields go at top level
+# Note: the key is "steps", not "offline_steps"
+batch_size: 8
+steps: 100000            # ACT skill minimum; 50 episodes × 120s × 30fps ≈ 180k frames
+num_workers: 4
+log_freq: 100
+save_freq: 5000
+eval_freq: 999999        # No sim env — effectively disable online eval
+
+output_dir: outputs/train/ur5_hdd_act
+
+seed: 42
+
+wandb:
+  enable: true

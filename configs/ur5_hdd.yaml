@@ -1,0 +1,53 @@
+robot:
+  type: ur5_hdd
+  robot_ip: "192.168.0.102"
+  gripper_port: "/dev/ttyUSB0"
+  gripper_baudrate: 115200
+  gripper_slave_id: 1
+  move_speed: 0.5
+  move_acceleration: 0.5
+  ee_speed: 0.05
+  ee_acceleration: 0.05
+  ee_step_size: 0.005
+  gripper_step_size: 1
+  cameras:
+    top:
+      type: intelrealsense
+      serial_number_or_name: "333422305051"
+      width: 640
+      height: 480
+      fps: 30
+      warmup_s: 3
+    side_left:
+      type: intelrealsense
+      serial_number_or_name: "333422303023"
+      width: 640
+      height: 480
+      fps: 30
+      warmup_s: 3
+    side_right:
+      type: intelrealsense
+      serial_number_or_name: "338122302446"
+      width: 640
+      height: 480
+      fps: 30
+      warmup_s: 3
+
+teleop:
+  type: keyboard_ee
+
+dataset:
+  repo_id: "toyoshima/ur5_hdd_4_pieces"
+  root: "/mnt/data/lerobot_datasets"
+  single_task: "Complete HDD disassembly - remove all 3 parts with screw removal"
+  fps: 30
+  episode_time_s: 120
+  reset_time_s: 30
+  num_episodes: 50
+  video: true
+  push_to_hub: false
+  streaming_encoding: true
+  encoder_threads: 2
+  vcodec: "auto"
+
+display_data: true
