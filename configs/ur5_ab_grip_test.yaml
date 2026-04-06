@@ -37,13 +37,13 @@ teleop:
   type: keyboard_ee
 
 dataset:
-  repo_id: "toyoshima/ur5_hdd_4_pieces"
-  root: "/mnt/data/lerobot_datasets"
-  single_task: "Complete HDD disassembly - remove all 3 parts with screw removal"
+  repo_id: "toyoshima/ur5_ab_grip_test"
+  root: "/mnt/data/lerobot_datasets_ab_grip"
+  single_task: "Move arm from 0 to A to B, close gripper at B, move to C, open gripper at C, return to 0"
   fps: 5
-  episode_time_s: 120
-  reset_time_s: 15
-  num_episodes: 10
+  episode_time_s: 50   # extra time for 3-4s dwell at C before and after opening gripper
+  reset_time_s: 10
+  num_episodes: 20
   video: true
   push_to_hub: false
   streaming_encoding: true

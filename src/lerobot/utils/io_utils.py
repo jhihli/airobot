@@ -21,7 +21,8 @@ from typing import TypeVar
 import imageio
 
 JsonLike = str | int | float | bool | None | list["JsonLike"] | dict[str, "JsonLike"] | tuple["JsonLike", ...]
-T = TypeVar("T", bound=JsonLike)
+
+T = TypeVar("T")
 
 
 def write_video(video_path, stacked_frames, fps):

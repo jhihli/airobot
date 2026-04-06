@@ -1,0 +1,51 @@
+# A→B with gripper open/close training
+# Run with: lerobot-train --config_path configs/train_ur5_ab_grip_test_act.yaml
+
+dataset:
+  repo_id: "toyoshima/ur5_ab_grip_test"
+  root: "/mnt/data/lerobot_datasets_ab_grip"
+  image_transforms:
+    enable: true
+
+policy:
+  type: act
+  push_to_hub: false
+
+  input_features: null
+  output_features: null
+
+  # 5fps × 25s episode = 125 frames. chunk_size=15 = 3s of prediction.
+  chunk_size: 15
+  n_action_steps: 15
+
+  dim_model: 128
+  n_heads: 4
+  dim_feedforward: 512
+  n_encoder_layers: 2
+  n_decoder_layers: 1
+  dropout: 0.1
+
+  vision_backbone: resnet18
+  pretrained_backbone_weights: ResNet18_Weights.IMAGENET1K_V1
+
+  use_vae: true
+  latent_dim: 32
+  kl_weight: 10.0
+
+  optimizer_lr: 1.0e-4
+  optimizer_weight_decay: 1.0e-4
+  optimizer_lr_backbone: 1.0e-5
+
+batch_size: 8
+steps: 80000   # 59 eps × ~150 frames = 8850 frames → ~90 epochs @ batch=8
+num_workers: 4
+log_freq: 100
+save_freq: 5000
+eval_freq: 999999
+
+output_dir: outputs/train/ur5_ab_grip_test_act_v4
+
+seed: 42
+
+wandb:
+  enable: false

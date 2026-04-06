@@ -155,6 +155,23 @@ class KeyboardEndEffectorTeleop(KeyboardTeleop):
         super().__init__(config)
         self.config = config
         self.misc_keys_queue = Queue()
+        self._robot = None  # set via set_robot() before recording
+        # Sticky gripper state: persists last explicit open/close command so that
+        # the recorded action reflects the physical gripper state on every frame,
+        # not just the single frame where the key event was polled.
+        # Initialized to 2.0 (open) to match the robot's typical start state.
+        self._gripper_sticky = 2.0
+        # Immediate-capture queue for ctrl key presses.
+        # pynput fires press+release within ~50ms; at 5Hz both events land in
+        # event_queue before the next get_action() poll, so the final polled
+        # state is False (released) and the command is silently dropped.
+        # This queue is populated in _on_press (not _on_release) so every tap
+        # is guaranteed to reach get_action() regardless of timing.
+        self._gripper_press_queue = Queue()
+
+    def set_robot(self, robot) -> None:
+        """Inject robot reference so get_action() can read current TCP pose."""
+        self._robot = robot
 
     def _on_press(self, key):
         # Handle both regular keys (KeyCode with .char) and special keys (Key enum)
@@ -167,6 +184,15 @@ class KeyboardEndEffectorTeleop(KeyboardTeleop):
             self.misc_keys_queue.put(key.char)
         else:
             self.event_queue.put((key, True))
+            # Immediately capture ctrl key presses for gripper control.
+            # Same reasoning as misc_keys_queue: a quick tap fires press+release
+            # within ~50ms; at 5Hz both events are already in event_queue before
+            # get_action() polls, so polled state ends up False and the command
+            # is lost. Capturing on press here guarantees delivery.
+            if key == keyboard.Key.ctrl_l:
+                self._gripper_press_queue.put(0.0)  # close
+            elif key == keyboard.Key.ctrl_r:
+                self._gripper_press_queue.put(2.0)  # open
 
     def _on_release(self, key):
         # Handle both regular keys (KeyCode with .char) and special keys (Key enum)
@@ -179,53 +205,61 @@ class KeyboardEndEffectorTeleop(KeyboardTeleop):
 
     @property
     def action_features(self) -> dict:
+        """Action: absolute TCP pose (6D) captured from robot + gripper (1D) from keyboard."""
         if self.config.use_gripper:
             return {
                 "dtype": "float32",
-                "shape": (4,),
-                "names": {"delta_x": 0, "delta_y": 1, "delta_z": 2, "gripper": 3},
+                "shape": (7,),
+                "names": {
+                    "tcp.x": 0, "tcp.y": 1, "tcp.z": 2,
+                    "tcp.rx": 3, "tcp.ry": 4, "tcp.rz": 5,
+                    "gripper": 6,
+                },
             }
         else:
             return {
                 "dtype": "float32",
-                "shape": (3,),
-                "names": {"delta_x": 0, "delta_y": 1, "delta_z": 2},
+                "shape": (6,),
+                "names": {
+                    "tcp.x": 0, "tcp.y": 1, "tcp.z": 2,
+                    "tcp.rx": 3, "tcp.ry": 4, "tcp.rz": 5,
+                },
             }
 
     @check_if_not_connected
     def get_action(self) -> RobotAction:
+        """Return current TCP pose (from robot) + gripper command (from keyboard).
+
+        Arm movement is captured by querying the robot's actual TCP position — the
+        operator moves the arm via freedrive/teach pendant and presses ctrl_l/ctrl_r
+        only to open/close the gripper.
+        """
         self._drain_pressed_keys()
-        delta_x = 0.0
-        delta_y = 0.0
-        delta_z = 0.0
-        gripper_action = 1.0
 
-        # Generate action based on current key states
-        for key, val in self.current_pressed.items():
-            if key == keyboard.Key.up:
-                delta_y = -int(val)
-            elif key == keyboard.Key.down:
-                delta_y = int(val)
-            elif key == keyboard.Key.left:
-                delta_x = int(val)
-            elif key == keyboard.Key.right:
-                delta_x = -int(val)
-            elif key == keyboard.Key.shift:
-                delta_z = -int(val)
-            elif key == keyboard.Key.shift_r:
-                delta_z = int(val)
-            elif key == keyboard.Key.ctrl_r:
-                # Gripper actions are expected to be between 0 (close), 1 (stay), 2 (open)
-                gripper_action = int(val) + 1
-            elif key == keyboard.Key.ctrl_l:
-                gripper_action = int(val) - 1
+        # Drain immediate-capture gripper press events and update sticky state.
+        # Using _gripper_press_queue (populated in _on_press) guarantees that
+        # quick taps are not lost even when press+release both land in event_queue
+        # before this poll. The sticky state then holds the last command for every
+        # subsequent frame so the dataset reflects the physical gripper state.
+        while not self._gripper_press_queue.empty():
+            self._gripper_sticky = self._gripper_press_queue.get_nowait()
 
+        gripper_action = self._gripper_sticky
         self.current_pressed.clear()
 
+        # Read current TCP pose from robot (set via set_robot() before recording)
+        if self._robot is not None and self._robot.is_connected:
+            tcp = list(self._robot.get_tcp_pose())
+        else:
+            tcp = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
         action_dict = {
-            "delta_x": delta_x,
-            "delta_y": delta_y,
-            "delta_z": delta_z,
+            "tcp.x": tcp[0],
+            "tcp.y": tcp[1],
+            "tcp.z": tcp[2],
+            "tcp.rx": tcp[3],
+            "tcp.ry": tcp[4],
+            "tcp.rz": tcp[5],
         }
 
         if self.config.use_gripper:
